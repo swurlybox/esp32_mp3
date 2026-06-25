@@ -1,15 +1,13 @@
 #include <stdio.h>
-
 #include "input.h"
 
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 
-static const gpio_num_t led_pin = GPIO_NUM_13;
+static const gpio_num_t led_pin = GPIO_NUM_32;
 static const uint32_t sleep_time_ms = 1000;
 
 int app_main() {
-
     input_module_init();
 
     uint32_t led_state = 0;
@@ -19,7 +17,6 @@ int app_main() {
     while (1) {
         led_state = !led_state;
         gpio_set_level(led_pin, led_state);
-        printf("LED state %ld\n", led_state);
         vTaskDelay(sleep_time_ms / portTICK_PERIOD_MS);
     }
 
