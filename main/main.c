@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "input.h"
+#include "fs.h"
 
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
@@ -9,7 +10,8 @@ static const uint32_t sleep_time_ms = 1000;
 
 int app_main() {
     input_module_init();
-
+    fs_init();
+    
     uint32_t led_state = 0;
     gpio_reset_pin(led_pin);
     gpio_set_direction(led_pin, GPIO_MODE_OUTPUT);
