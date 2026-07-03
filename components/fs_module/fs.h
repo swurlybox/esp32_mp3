@@ -1,6 +1,7 @@
 #ifndef FS_H
 #define FS_H
 
-void fs_init(void);
+int     fs_init(void);
+void    fs_enter(void);
 
 #endif

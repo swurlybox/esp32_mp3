@@ -3,3 +3,20 @@
 idf.py set-target esp32
 idf.py build
 idf.py -P /dev/ttyUSB0 flash monitor
+
+TIP! : Do not flash with IO lines connected to the peripherals! Keep the ESP
+    unconnected, w/ just the usb cable hooked up, do the flash/monitor, then
+    hook up your peripherals, and hit the reset button.
+
+    If that doesn't work, try detaching the VIN and GND pins. Reset the MCU.
+    Then reattach the VIN and GND pins. Then reset the MCU again.
+
+    Connect your peripherals to the same power source as your ESP32, such
+    that they all power up at around the same time. I tried powering them
+    separately, but ended up with device initialization errors. As such, when
+    programming, connect the peripherals to the ESP32 board's 5 VIN.
+
+    These cheap ESP32 boards have their issues, and this is one of them. Very
+    inconvenient, it must have something to do with strapping boot pins. It
+    doesn't even help either that the board I bought is a clone, which doesn't
+    come with any datasheet or board manual, so I have to take a leap of faith.

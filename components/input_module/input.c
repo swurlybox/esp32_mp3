@@ -7,6 +7,12 @@
 #include "freertos/task.h"
 
 #define DEBOUNCE_DELAY_US 200000ULL
+#define BUTTON_ARR_SIZE     4
+
+typedef struct button {
+    enum button_code code;
+    void (*button_cb)(void); 
+} button_t;
 
 static void df_hdlr(void) {
     (void) 0;
@@ -54,7 +60,7 @@ static void button_handler_task(void *arg) {
     }
 };
 
-void input_module_init(void) {
+int input_module_init(void) {
     // Configure the buttons
     gpio_reset_pin(up_pin);
     gpio_set_direction(up_pin, GPIO_MODE_INPUT);
@@ -77,7 +83,7 @@ void input_module_init(void) {
     gpio_set_intr_type(cancel_pin, GPIO_INTR_POSEDGE);
 
     gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
-    xTaskCreate(button_handler_task, "button_handler_task", 2048, NULL, 10,
+    xTaskCreate(button_handler_task, "button_handler_task", 4098, NULL, 10,
         NULL);
 
     /* Install the driver's GPIO ISR handler service, which allows per-pin
@@ -89,6 +95,8 @@ void input_module_init(void) {
     gpio_isr_handler_add(down_pin, gpio_isr_handler, (void*) DOWN_BUTTON);
     gpio_isr_handler_add(select_pin, gpio_isr_handler, (void*) SELECT_BUTTON);
     gpio_isr_handler_add(cancel_pin, gpio_isr_handler, (void*) CANCEL_BUTTON);
+    
+    return 0;
 }
 
 void button_cb_reset_all(void) {
