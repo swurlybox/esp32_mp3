@@ -4,7 +4,8 @@ idf_component_register(
     PRIV_REQUIRES 
         input_module 
         esp_driver_gpio
-        fs_module 
+        fs_module
+        display_module 
 )
 
 

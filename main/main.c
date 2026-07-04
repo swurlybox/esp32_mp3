@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "input.h"
 #include "fs.h"
+#include "display.h"
 
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
@@ -19,6 +20,8 @@ int app_main() {
     if (ret < 0) {
         return -1;
     }
+
+    display_init();
 
     fs_enter();
     
