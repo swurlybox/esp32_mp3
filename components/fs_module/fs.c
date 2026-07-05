@@ -7,6 +7,7 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "input.h"
+#include "display.h"
 
 /* TODO: Hook up SPI pin numbers. Eventually make this a KConfig option
     to make this configurable via a separate module. */
@@ -220,6 +221,7 @@ static void fs_up(void) {
         ctx.index--;
     }
     lsdir(ctx.cwd);
+    xSemaphoreGive(display_semaphore);
 };
 
 static void fs_down(void) { 
@@ -229,6 +231,7 @@ static void fs_down(void) {
         ctx.index++;
     }
     lsdir(ctx.cwd);
+    xSemaphoreGive(display_semaphore);
 };
 
 /* TODO: Implement rest of file system navigation functions */
@@ -265,6 +268,7 @@ static void fs_select(void) {
     } else {
         printf("FILE: %s\n", entry->d_name);
     }
+    xSemaphoreGive(display_semaphore);
 }
 
 static void fs_cancel(void) {
@@ -272,6 +276,7 @@ static void fs_cancel(void) {
     ctx.index = 0;
     ctx.dirent_count = 0;
     lsdir(ctx.cwd);
+    xSemaphoreGive(display_semaphore);
 }
 
 /* TODO: Filesystem navigation */

@@ -8,6 +8,7 @@
 
 #define DEBOUNCE_DELAY_US 200000ULL
 #define BUTTON_ARR_SIZE     4
+#define BUTTON_TASK_PRIORITY 10
 
 typedef struct button {
     enum button_code code;
@@ -83,8 +84,8 @@ int input_module_init(void) {
     gpio_set_intr_type(cancel_pin, GPIO_INTR_POSEDGE);
 
     gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
-    xTaskCreate(button_handler_task, "button_handler_task", 4098, NULL, 10,
-        NULL);
+    xTaskCreate(button_handler_task, "button_handler_task", 4098, NULL, 
+        BUTTON_TASK_PRIORITY, NULL);
 
     /* Install the driver's GPIO ISR handler service, which allows per-pin
         GPIO interrupt handlers. This function provides a global GPIO ISR and

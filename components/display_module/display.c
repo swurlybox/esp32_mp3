@@ -5,6 +5,7 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
+#include "freertos/task.h"
 
 #define I2C_BUS_PORT 0
 
@@ -22,15 +23,29 @@
 #define LCD_CMD_BITS            8
 #define LCD_PARAM_BITS          8
 
-/* LVGL related configurations */
-#define LVGL_TICK_PERIOD_MS     5
-#define LVGL_TASK_STACK_SIZE    (4 * 1024)
-#define LVGL_TASK_PRIORITY      2
-#define LVGL_PALETTE_SIZE       8
-#define LVGL_TASK_MAX_DELAY_MS  500
-#define LVGL_TASK_MIN_DELAY_MS  1000 / CONFIG_FREERTOS_HZ
+#define DISPLAY_TASK_PRIORITY   9 /* 1 step lower from the input task */
 
 static uint8_t oled_buffer[LCD_H_RES * LCD_V_RES / 8];  /* 128 * 64 bits */
+static esp_lcd_panel_handle_t panel_handle = NULL;
+
+/* I think a semaphore here is fine to synchronize the display updates
+    with the display task. It's essentially an indicator that a display
+    update needs to happen. TODO: make this extern available */
+SemaphoreHandle_t display_semaphore = NULL;
+
+static void display_task(void *arg) {
+    printf("Starting display task\n");
+    while(1) {
+        /* Thread should yield here. */
+        xSemaphoreTake(display_semaphore, portMAX_DELAY);
+        for (int i = 0; i < 1024; i++) {
+            oled_buffer[i] ^= (uint8_t) 0xFF;   /* toggle the bits */
+        }
+        printf("display_update triggered\n");
+        /* TODO: If I2C transaction error, do try again */
+        esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, 128, 64, oled_buffer);
+    }
+}
 
 void display_init() {
     /* Initialize the SSD1306 driver. */
@@ -59,7 +74,7 @@ void display_init() {
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus, &io_config, &io_handle));
 
     printf("Install SSD1306 panel driver\n");
-    esp_lcd_panel_handle_t panel_handle = NULL;
+    panel_handle = NULL;    /* global */
     esp_lcd_panel_dev_config_t panel_config = {
         .bits_per_pixel = 1,
         .reset_gpio_num = PIN_NUM_RST
@@ -75,21 +90,21 @@ void display_init() {
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 
-    /* Initialize LVGL (optional if you choose to use LVGL) */
-
-    /* Create a task that periodically checks for display updates, (can 
-        use a message queue blocking scheme similar to the button inputs. )
-        and sends the frame buffer to the driver when needed. */
-
     /* TEST: Draw a dummy bitmap to the panel
         TODO: Save reference to panel_handle somewhere, such that API calls
-            to update the display can reference the panel_handle.
-
-     */
+            to update the display can reference the panel_handle. */
 
     for (int i = 0; i < 1024; i++) {
         oled_buffer[i] = (uint8_t) ((i + 1) % 256);
     }
+
+    /* This is the method used to send the frame_buffer to the display */
     esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, 128, 64, oled_buffer);
 
+    display_semaphore = xSemaphoreCreateBinary();
+
+    /* Create a display-thread task that sends an alternating frame buffer
+        every second. */
+    xTaskCreate(display_task, "display_task", 4098, NULL,
+        DISPLAY_TASK_PRIORITY, NULL);
 };
