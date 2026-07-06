@@ -21,6 +21,11 @@
 #define SECTOR_SIZE         512
 #define MAX_CWD_PATH_LEN    512
 
+/* DISPLAY OFFSETS */
+#define CWD_MARGIN_OFFSET   (30)
+#define FILETYPE_PX_OFFSET  (12)
+#define FILENAME_PX_OFFSET  (24)
+
 struct filesystem_context {
     uint32_t index;
     uint32_t dirent_count;
@@ -176,6 +181,9 @@ static void chdir(const char *path) {
     return;
 }
 
+#define WIN_DEF_START   (0)
+#define WIN_DEF_END     (6)
+
 /* Automatically prepends mount point, so caller just focuses on the path. */
 static void lsdir(const char *path) {
     char temp_path[MAX_CWD_PATH_LEN] = {0};
@@ -188,6 +196,7 @@ static void lsdir(const char *path) {
         return;
     }
 
+    /* UART output. */
     printf("%s:\n", temp_path);
     int count = 0;
     struct dirent *entry;
@@ -211,6 +220,50 @@ static void lsdir(const char *path) {
 
     ctx.dirent_count = count;
 
+    /* We need the dirent count before we can do the display output. Hence,
+        why these two sections are separated. */
+    /* DISPLAY output */
+    uint8_t row = 1;
+    uint8_t win_start;
+    uint8_t win_end;
+
+    graphics_clear();
+    graphics_draw_line_chars("CWD: ", 0, 0, 5);
+    graphics_draw_line_chars(ctx.cwd, 0, CWD_MARGIN_OFFSET, 20);
+
+    if (ctx.dirent_count <= 7 || ctx.index <= 2) {
+        win_start   = WIN_DEF_START;
+        win_end     = WIN_DEF_END;
+    }
+    else if (ctx.dirent_count - ctx.index <= 3) {
+        win_start   = (uint8_t) (ctx.dirent_count - 7U);
+        win_end     = (uint8_t) (ctx.dirent_count - 1U);   
+    }
+    else {
+        win_start   = (uint8_t) (ctx.index - 3U);
+        win_end     = (uint8_t) (ctx.index + 3U);
+    }
+
+    uint8_t index = 0;
+    rewinddir(dir);
+    while ((entry = readdir(dir)) != NULL) {
+        if ((index) >= win_start && (index) <= win_end) {
+            if (index == ctx.index) {
+                graphics_draw_line_chars(">", row, 0, 1);
+            }
+            if (entry->d_type == DT_DIR) {
+                graphics_draw_line_chars("D", row, FILETYPE_PX_OFFSET, 1);
+            }
+            else {
+                graphics_draw_line_chars("F", row, FILETYPE_PX_OFFSET, 1);
+            }
+            graphics_draw_line_chars(entry->d_name, row, FILENAME_PX_OFFSET, 
+                20);
+            row++;
+        }
+        index++;
+    }
+    xSemaphoreGive(display_semaphore);
     closedir(dir);
 }
 
@@ -221,7 +274,6 @@ static void fs_up(void) {
         ctx.index--;
     }
     lsdir(ctx.cwd);
-    xSemaphoreGive(display_semaphore);
 };
 
 static void fs_down(void) { 
@@ -231,7 +283,6 @@ static void fs_down(void) {
         ctx.index++;
     }
     lsdir(ctx.cwd);
-    xSemaphoreGive(display_semaphore);
 };
 
 /* TODO: Implement rest of file system navigation functions */
@@ -268,7 +319,6 @@ static void fs_select(void) {
     } else {
         printf("FILE: %s\n", entry->d_name);
     }
-    xSemaphoreGive(display_semaphore);
 }
 
 static void fs_cancel(void) {
@@ -276,7 +326,6 @@ static void fs_cancel(void) {
     ctx.index = 0;
     ctx.dirent_count = 0;
     lsdir(ctx.cwd);
-    xSemaphoreGive(display_semaphore);
 }
 
 /* TODO: Filesystem navigation */

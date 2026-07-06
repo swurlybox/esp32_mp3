@@ -16,17 +16,51 @@
 #define PIN_NUM_RST             -1
 #define I2C_HW_ADDR             0x3C
 
-/* Pixel numbeer of horizontal and vertical */
+/* Pixel number of horizontal and vertical */
 #define LCD_H_RES               128
 #define LCD_V_RES               64
+#define MAX_ROWS                (LCD_V_RES / 8)
+#define DISPLAY_BYTE_SIZE       (LCD_H_RES * LCD_V_RES / 8)
 
 #define LCD_CMD_BITS            8
 #define LCD_PARAM_BITS          8
 
 #define DISPLAY_TASK_PRIORITY   9 /* 1 step lower from the input task */
 
-static uint8_t oled_buffer[LCD_H_RES * LCD_V_RES / 8];  /* 128 * 64 bits */
+/* Character Bitmap Data */
+#define CHAR_BYTE_LEN   (5)
+#define SUPPORTED_CHARS (48)
+
+#define PERIOD_LOC      (26)
+#define SPACE_LOC       (27)
+#define QUESTION_LOC    (28)
+#define EXCLAM_LOC      (29)
+#define COMMA_LOC       (30)
+#define APOST_LOC       (31)
+#define DQUOT_LOC       (32)
+#define FSLASH_LOC      (33)
+#define COLON_LOC       (34)
+#define ZERO_LOC        (35)
+#define UNDERSCORE_LOC  (45)
+#define RIGHT_ARR_LOC   (46)
+
+#define UNSUPPORTED     (47)
+
+
+typedef struct {
+    uint8_t byte[CHAR_BYTE_LEN];
+} display_char;
+
+static const display_char arr[SUPPORTED_CHARS] = {
+    #include "char_byte_map.txt"
+};
+
+static uint32_t dbi = 0;    /* index into a byte in the oled_buffer. */
+static uint8_t oled_buffer[DISPLAY_BYTE_SIZE];  /* 128 * 64 bits */
 static esp_lcd_panel_handle_t panel_handle = NULL;
+
+static int find_index(char c);
+static void draw_char(int bitmap_index);
 
 /* I think a semaphore here is fine to synchronize the display updates
     with the display task. It's essentially an indicator that a display
@@ -38,12 +72,10 @@ static void display_task(void *arg) {
     while(1) {
         /* Thread should yield here. */
         xSemaphoreTake(display_semaphore, portMAX_DELAY);
-        for (int i = 0; i < 1024; i++) {
-            oled_buffer[i] ^= (uint8_t) 0xFF;   /* toggle the bits */
-        }
         printf("display_update triggered\n");
         /* TODO: If I2C transaction error, do try again */
         esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, 128, 64, oled_buffer);
+        graphics_clear();
     }
 }
 
@@ -90,21 +122,100 @@ void display_init() {
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 
-    /* TEST: Draw a dummy bitmap to the panel
-        TODO: Save reference to panel_handle somewhere, such that API calls
-            to update the display can reference the panel_handle. */
-
-    for (int i = 0; i < 1024; i++) {
-        oled_buffer[i] = (uint8_t) ((i + 1) % 256);
-    }
-
-    /* This is the method used to send the frame_buffer to the display */
-    esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, 128, 64, oled_buffer);
-
     display_semaphore = xSemaphoreCreateBinary();
-
-    /* Create a display-thread task that sends an alternating frame buffer
-        every second. */
     xTaskCreate(display_task, "display_task", 4098, NULL,
         DISPLAY_TASK_PRIORITY, NULL);
 };
+
+
+void graphics_draw_line_chars(char *str, uint8_t row, uint8_t start, 
+    uint8_t buflen) {
+    char c;
+    int char_index;
+
+    if (row >= MAX_ROWS || start >= LCD_H_RES) {
+        return;
+    }
+
+    /* So the first byte of oled_buffer in my original implementation
+        was reserved, probably for sending an i2c command. But I think thats
+        been abstracted away by esp-idf's LCD panel driver, so I think I can
+        just use the first byte... */
+    dbi = (row * LCD_H_RES) + start; 
+    while (((c = *str) != '\0') && buflen-- > 0) {
+        /* find_index and draw_char are used to get the bitmap data for
+            each character. */
+        char_index = find_index(c);
+
+        /* don't want to wrap to next line, so just get out. */
+        if ((LCD_H_RES - (dbi % LCD_H_RES)) < CHAR_BYTE_LEN) {
+            break;
+        }
+
+        draw_char(char_index);
+       
+        /* db++ gives us a 1 bit margin between subsequent chars. */ 
+        dbi++;
+        str++;
+    }
+    dbi = 0;
+}
+
+static int find_index(char c) {
+    int char_index = UNSUPPORTED;
+    if ((c >= 'A' && c <= 'Z')) {
+        char_index = c - 'A';
+    }
+    else if ((c >= 'a' && c <= 'z')) {
+        char_index = c - 'a';
+    }
+    else if ((c >= '0' && c <= '9')) {
+        char_index = ZERO_LOC + (c - '0');
+    }
+    else if ((c == '.')) {
+        char_index = PERIOD_LOC;
+    }
+    else if ((c == ' ')) {
+        char_index = SPACE_LOC;
+    }
+    else if ((c == '?')) {
+        char_index = QUESTION_LOC;
+    }
+    else if ((c == '!')) {
+        char_index = EXCLAM_LOC;
+    }
+    else if ((c == ',')) {
+        char_index = COMMA_LOC;
+    }
+    else if ((c == '\'')) {
+        char_index = APOST_LOC;
+    }
+    else if ((c == '"')) {
+        char_index = DQUOT_LOC;
+    }
+    else if ((c == '/')) {
+        char_index = FSLASH_LOC;
+    }
+    else if ((c == ':')) {
+        char_index = COLON_LOC;
+    }
+    else if ((c == '_')) {
+        char_index = UNDERSCORE_LOC;
+    }
+    else if ((c == '>')) {
+        char_index = RIGHT_ARR_LOC;
+    }
+    return char_index;
+}
+
+static void draw_char(int index) {
+    for (int i = 0; i < CHAR_BYTE_LEN && dbi < DISPLAY_BYTE_SIZE; i++) {    
+        oled_buffer[dbi++] |= arr[index].byte[i];
+    }   
+}
+
+void graphics_clear() {
+    for (int i = 0; i < DISPLAY_BYTE_SIZE; i++) {
+        oled_buffer[i] = 0;
+    }
+}
