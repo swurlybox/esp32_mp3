@@ -69,12 +69,16 @@ SemaphoreHandle_t display_semaphore = NULL;
 
 static void display_task(void *arg) {
     printf("Starting display task\n");
+    esp_err_t res;
     while(1) {
         /* Thread should yield here. */
         xSemaphoreTake(display_semaphore, portMAX_DELAY);
         printf("display_update triggered\n");
         /* TODO: If I2C transaction error, do try again */
-        esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, 128, 64, oled_buffer);
+        do { 
+            res = esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, 128, 64, 
+                                        oled_buffer);
+        } while (res != ESP_OK);
         graphics_clear();
     }
 }
